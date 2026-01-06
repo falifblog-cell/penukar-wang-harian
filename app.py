@@ -25,20 +25,31 @@ if tema == "☀️ Mode Cerah (Light)":
         </style>
     """, unsafe_allow_html=True)
 
-# --- 3. FUNGSI TARIK DATA (YFINANCE) ---
-@st.cache_data(ttl=3600) # Cache data selama 1 jam supaya laju
+# --- 3. FUNGSI TARIK DATA (YFINANCE - DIPERBAIKI) ---
+@st.cache_data(ttl=3600)
 def get_exchange_rate(pair_code, period="1mo"):
-    # Yahoo Finance format: USDMYR=X
-    ticker = f"{pair_code}=X"
-    data = yf.download(ticker, period=period, progress=False)
+    # Format Yahoo: USDMYR=X
+    ticker_symbol = f"{pair_code}=X"
     
-    if len(data) > 0:
-        latest_rate = data['Close'].iloc[-1].item() # Harga tutup terkini
-        prev_rate = data['Close'].iloc[-2].item()   # Harga tutup semalam
-        history = data['Close']                     # Data untuk graf
-        date = data.index[-1].strftime('%d %b %Y')  # Tarikh data
-        return latest_rate, prev_rate, history, date
-    else:
+    try:
+        # Guna yf.Ticker().history() -> Lebih stabil dari yf.download()
+        ticker_data = yf.Ticker(ticker_symbol)
+        data = ticker_data.history(period=period)
+        
+        if not data.empty and len(data) > 1:
+            latest_rate = data['Close'].iloc[-1] # Harga tutup terkini
+            prev_rate = data['Close'].iloc[-2]   # Harga tutup semalam
+            history = data['Close']              # Data untuk graf
+            
+            # Format tarikh
+            last_date = data.index[-1]
+            date_str = last_date.strftime('%d %b %Y')
+            
+            return latest_rate, prev_rate, history, date_str
+        else:
+            return None, None, None, None
+            
+    except Exception as e:
         return None, None, None, None
 
 # --- 4. UI UTAMA ---
@@ -51,7 +62,7 @@ col1, col2 = st.columns([1, 2])
 
 # Input Amount
 with col1:
-    amount = st.number_input("Jumlah Asing", value=1.00, min_value=0.01)
+    amount = st.number_input("Jumlah Asing", value=1.00, min_value=0.01, format="%.2f")
 
 # Pilihan Mata Wang (Key Pair)
 currency_options = {
@@ -76,7 +87,7 @@ st.divider()
 # --- 5. PAPARAN KEPUTUSAN ---
 if st.button("🔄 Semak Kadar Terkini", type="primary"):
     
-    with st.spinner("Sedang ambil data dari pasaran global..."):
+    with st.spinner(f"Sedang menyemak kadar {pair_code}..."):
         rate, prev_rate, history, update_date = get_exchange_rate(pair_code)
     
     if rate:
@@ -120,4 +131,5 @@ if st.button("🔄 Semak Kadar Terkini", type="primary"):
             st.dataframe(chart_data.sort_index(ascending=False))
             
     else:
-        st.error("Maaf, gagal tarik data. Sila cuba sebentar lagi atau periksa internet.")
+        st.error(f"Maaf, data {pair_code} tidak dapat diambil buat masa ini. Sila cuba mata wang lain atau 'Refresh' page.")
+        st.caption("Tip: Kadang-kala Yahoo Finance menghadkan akses jika terlalu kerap refresh.")
